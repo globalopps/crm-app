@@ -45,7 +45,7 @@ label.chk input{margin-top:3px}
 .logoBox{background:#fff;border-radius:10px;padding:10px 12px;display:flex;align-items:center;justify-content:center}
 .logoBox img{width:100%;max-width:180px;height:auto;display:block}
 .mono{font-weight:700;color:var(--goldD);background:var(--gold);width:100%;height:100%;display:flex;align-items:center;justify-content:center}
-.marca span{font-size:12px;color:#C9DEDE;text-align:center;letter-spacing:.06em;text-transform:uppercase;font-weight:600}
+.marca span{font-size:11px;color:#C9DEDE;text-align:center;letter-spacing:.05em;text-transform:uppercase;font-weight:600}
 .nav{display:flex;flex-direction:column;gap:4px}
 .nav button{display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border-radius:8px;border:0;background:transparent;color:#C9DEDE;cursor:pointer;text-align:left;font-size:14px}
 .nav button:hover{background:#134A4B}.nav button.on{background:var(--tealM);color:#fff;font-weight:600}
@@ -83,6 +83,15 @@ main{flex:1;min-width:0;padding:22px 26px;display:flex;flex-direction:column;gap
 .due.vencido{background:var(--redL);color:var(--red)}.due.hoy{background:var(--ambL);color:var(--amb)}.due.sin{background:#fff;border:1px dashed var(--red);color:var(--red)}
 .wa{flex:none;width:32px;height:32px;border-radius:8px;border:1px solid var(--line2);background:#fff;color:var(--grn);display:inline-flex;align-items:center;justify-content:center}
 .card .dias{font-size:11px;color:var(--mut)}
+.metabar{height:7px;border-radius:999px;background:#E3E7E8;margin:6px 0 4px;overflow:hidden}.metabar i{display:block;height:100%;background:var(--teal);border-radius:999px}
+/* reporte */
+.rep-cab{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.rep-cab img{height:46px}
+@media print{
+  .lado,.noimp,#toasts,.zonas,#modal{display:none!important}
+  body{background:#fff}.app{display:block}main{padding:0}
+  .caja,.kpi{break-inside:avoid;border-color:#ccc}.kpis{grid-template-columns:repeat(4,1fr)}
+  .tabla{font-size:11px}.sx{overflow:visible}
+}
 /* colleges */
 .card.cc{padding-top:0;overflow:hidden;border-width:1.5px}
 .cband{margin:0 -12px 2px;padding:5px 12px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;display:flex;gap:6px;align-items:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -135,6 +144,7 @@ body.arrastrando .zonas{display:flex}
 /* login */
 .login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(160deg,var(--tealD),var(--teal))}
 .login .caja{width:100%;max-width:380px;padding:28px;display:flex;flex-direction:column;gap:14px}
+.login .razon{text-align:center;font-weight:700;letter-spacing:.08em;font-size:13px;color:var(--tealD);margin-top:-4px}
 .login .logo{display:flex;align-items:center;justify-content:center;padding:4px 0 6px}.login .logo img{width:100%;max-width:280px;height:auto}
 #toasts{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:40}
 .toast{background:var(--tealD);color:#fff;padding:10px 14px;border-radius:10px;font-size:13px;max-width:360px;box-shadow:0 6px 20px rgba(0,0,0,.2)}
@@ -162,7 +172,7 @@ body.arrastrando .zonas{display:flex}
    ===================================================================== */
 const SUPABASE_URL      = 'https://obgjvpciqrqwekbukqwq.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_77YcJ32tGkkvtIhr6Hf2OA_92sH-Jzb';
-const VERSION = 'CRM Etapa 1 · 12-nov-2026';
+const VERSION = 'Versión 1.01';
 
 /* ---------------------------- utilidades ---------------------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -209,10 +219,11 @@ const COLORES = ['#0D6B6B', '#3B4F8F', '#8A4B08', '#7A2E6E', '#1F7A3E', '#9A3B2E
 const S = {
   sesion: null, yo: null, usuarios: [], pipelines: [], etapas: [], leads: [], lotes: [],
   config: { tc: 3.75, dias_estancado: 14 }, privLead: {}, privPipe: {}, vendedores: [], fin: null,
-  colleges: [], lc: {}, privCol: {}, productos: [], sinCol: false,
+  colleges: [], lc: {}, privCol: {}, productos: [], sinCol: false, metas: [], v101: false,
+  rep: { periodo: 'semana', desde: '', hasta: '', asesor: 'todos', acts: null, clave: '' },
   vista: 'pipeline', pipeId: null, arr: null, act7: null,
   f: { asesor: 'todos', q: '', vencidos: false, college: 'todos' },
-  base: { estado: 'cerrados', pipe: '', asesor: '', college: '', q: '', desde: '', hasta: '' },
+  base: { estado: 'cerrados', pipe: '', asesor: '', college: '', q: '', desde: '', hasta: '', sel: new Set() },
   imp: null, ficha: null
 };
 let sb = null;
@@ -242,7 +253,21 @@ function ingresoUSD(l) {
   const v = l.estado === 'ganado' ? aUSD(l.valor_cierre, l.moneda_cierre) : aUSD(l.valor, l.moneda);
   return v ? v - aUSD(pp && pp.costo_default, pipe.moneda) : 0;
 }
-const prob = l => (E(l.etapa_id) || {}).probabilidad || 0;
+/* metas mensuales: cantidad de ganados */
+const metaDe = (uid, pid) => (S.metas.find(m => m.user_id === uid && (m.pipeline_id || null) === (pid || null)) || {}).meta || 0;
+const metaTotal = uid => metaDe(uid, null) || S.metas.filter(m => m.user_id === uid && m.pipeline_id).reduce((a, m) => a + m.meta, 0);
+const inicioMes = () => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d; };
+const ganadoEsteMes = l => l.estado === 'ganado' && l.cerrado_en && new Date(l.cerrado_en) >= inicioMes();
+const cierraEsteMes = l => { if (!l.cierre_estimado) return false; const d = new Date(l.cierre_estimado + 'T12:00'), h = new Date(); return d.getFullYear() === h.getFullYear() && d.getMonth() === h.getMonth(); };
+const precios = pid => { const p = P(pid) || {}; return Array.isArray(p.precios) ? p.precios : []; };
+/* tarifa sugerida: la que coincide con el precio sugerido del pipeline, o la primera */
+const tarifaDef = pid => { const ps = precios(pid), p = P(pid) || {}; return ps.find(x => Number(x.valor) === Number(p.valor_default)) || ps[0] || null; };
+function kpiMeta(g, meta, quien) {
+  if (!meta) return `<div class="kpi"><span>Ganados este mes</span><b class="verde">${g}</b><small>${quien} · sin meta asignada</small></div>`;
+  const pct = Math.min(100, Math.round(g / meta * 100)), ok = g >= meta;
+  return `<div class="kpi" style="${ok ? 'border-color:#9CCFAE;background:var(--grnL)' : ''}"><span>Meta del mes · ${quien}</span><b class="${ok ? 'verde' : ''}">${g} de ${meta}</b>
+    <div class="metabar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="Avance de la meta"><i style="width:${pct}%"></i></div><small>${ok ? '¡Meta cumplida!' : `faltan ${meta - g} · ${pct}%`}</small></div>`;
+}
 /* colleges */
 const ESTADOS_COL = { interesado: 'Interesado', aplico: 'Aplicó', admitido: 'Admitido', rechazado: 'Rechazado', matriculado: 'Matriculado', descartado: 'Descartado' };
 const Col = id => S.colleges.find(c => c.id === id);
@@ -254,6 +279,12 @@ function rgb(h) { h = String(h || '#9AA7A9').replace('#', ''); return [0, 2, 4].
 function tinte(h, a) { const c = rgb(h); return `rgb(${c.map(x => Math.round(255 - (255 - x) * a)).join(',')})`; }
 function textoSobre(h) { const [r, g, b] = rgb(h).map(x => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }); return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 0.36 ? '#172426' : '#FFFFFF'; }
 const sinTildes = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+function buscarUsuario(txt) {
+  const t = sinTildes(txt); if (!t) return null;
+  const us = S.usuarios.filter(u => u.activo);
+  return us.find(u => sinTildes(u.email) === t) || us.find(u => sinTildes(u.nombre) === t)
+    || us.find(u => sinTildes(u.nombre).split(' ')[0] === t.split(' ')[0] && (t.split(' ').length === 1 || sinTildes(u.nombre).includes(t.split(' ')[1]))) || null;
+}
 function buscarCollege(txt) {
   const t = sinTildes(txt); if (!t) return null;
   const claves = c => [c.nombre, c.sigla].concat(c.alias || []).map(sinTildes).filter(Boolean);
@@ -280,12 +311,12 @@ async function init() {
 function vLogin(error) {
   $('#app').innerHTML = `<div class="login"><form class="caja" data-sub="login">
     ${logoHTML()}
-    <div style="text-align:center"><h1>CRM comercial</h1></div>
+    <div class="razon">GLOBAL OPPORTUNITIES S.A.C.</div>
     ${error ? `<div class="aviso r">${esc(error)}</div>` : ''}
     <label class="f">Correo<input type="email" name="email" required autocomplete="username"></label>
     <label class="f">Contraseña<input type="password" name="clave" required autocomplete="current-password"></label>
     <button class="btn pri" type="submit">Entrar</button>
-    <span class="mut" style="font-size:12px;text-align:center">${VERSION}</span>
+    <span class="mut" style="font-size:12px;text-align:center">CRM · ${VERSION}</span>
   </form></div>`;
 }
 F.login = async f => {
@@ -316,6 +347,9 @@ async function cargar() {
     const [co, lc] = await Promise.all([todo('crm_colleges', c => c.order('orden').order('nombre')), todo('crm_lead_colleges', c => c.order('created_at').order('id'))]);
     S.colleges = co; S.lc = {}; lc.forEach(x => { (S.lc[x.lead_id] = S.lc[x.lead_id] || []).push(x); }); S.sinCol = false;
   } catch (e) { S.colleges = []; S.lc = {}; S.sinCol = true; }
+  S.v101 = S.pipelines.some(p => 'precios' in p);          // versión 1.01: tarifas y metas
+  try { S.metas = S.v101 ? await todo('crm_metas') : []; } catch (e) { S.metas = []; }
+  S.rep.acts = null;
   if (!P(S.pipeId) || !P(S.pipeId).activo) S.pipeId = (pipesActivos()[0] || {}).id || null;
   if (esAdmin()) await cargarAdmin();
 }
@@ -351,9 +385,9 @@ function render() {
   const it = (v, t, n) => `<button data-act="ir" data-v="${v}" class="${S.vista === v ? 'on' : ''}">${t}${n ? `<span class="n">${n}</span>` : ''}</button>`;
   $('#app').innerHTML = `<div class="app">
     <nav class="lado" aria-label="Menú principal">
-      <div class="marca"><div class="logoBox"><img src="${LOGO}" alt="Global Opportunities"></div><span>CRM comercial</span></div>
+      <div class="marca"><div class="logoBox"><img src="${LOGO}" alt="Global Opportunities"></div><span>GLOBAL OPPORTUNITIES S.A.C.</span></div>
       <div class="nav">
-        ${it('pipeline', 'Pipeline')}${it('pendientes', 'Pendientes', nV)}${it('base', 'Base de leads')}
+        ${it('pipeline', 'Pipeline')}${it('pendientes', 'Pendientes', nV)}${it('base', 'Base de leads')}${it('reporte', 'Reportes')}
         ${jefe() ? it('panel', 'Panel', cola) : ''}${esAdmin() ? it('importar', 'Importar base') + it('config', 'Configuración') : ''}
       </div>
       <div class="yo"><div class="q"><span class="ava g">${esc(ini(yo.nombre))}</span><div><b>${esc(yo.nombre)}</b><small>${{ admin: 'Administrador', supervisor: 'Supervisor', asesor: 'Asesor comercial' }[yo.rol]}</small></div></div>
@@ -366,7 +400,7 @@ function render() {
 function renderMain() {
   const m = $('#main'); if (!m) return;
   const tw = $('.tw'), sl = tw ? tw.scrollLeft : 0, st = window.scrollY;
-  m.innerHTML = ({ pipeline: vPipeline, pendientes: vPendientes, base: vBase, panel: vPanel, importar: vImportar, config: vConfig }[S.vista] || vPipeline)();
+  m.innerHTML = ({ pipeline: vPipeline, pendientes: vPendientes, base: vBase, panel: vPanel, importar: vImportar, config: vConfig, reporte: vReporte }[S.vista] || vPipeline)();
   const tw2 = $('.tw'); if (tw2) tw2.scrollLeft = sl; window.scrollTo(0, st);
 }
 A.ir = el => { S.vista = el.dataset.v; S.f.q = ''; if (S.vista === 'panel') cargarAct7(); render(); window.scrollTo(0, 0); };
@@ -403,19 +437,23 @@ function tablero() {
   }
   const mes = new Date(); mes.setDate(1); mes.setHours(0, 0, 0, 0);
   const cerr = e => ls.filter(l => l.estado === e && l.cerrado_en && new Date(l.cerrado_en) >= mes).length;
-  const tot = ab.reduce((a, l) => a + aUSD(l.valor, l.moneda), 0), pon = ab.reduce((a, l) => a + aUSD(l.valor, l.moneda) * prob(l) / 100, 0);
+  const tot = ab.reduce((a, l) => a + aUSD(l.valor, l.moneda), 0);
+  const gMes = ls.filter(ganadoEsteMes), porCerrar = ab.filter(cierraEsteMes);
+  const quienes = !jefe() ? [S.yo.user_id] : S.f.asesor === 'todos' ? S.usuarios.filter(u => esAdmin() || u.user_id === S.yo.user_id || u.supervisor_id === S.yo.user_id).map(u => u.user_id) : S.f.asesor === 'sin' ? [] : [S.f.asesor];
+  const meta = quienes.reduce((a, u) => a + metaDe(u, p.id), 0), quien = !jefe() ? 'tú' : S.f.asesor === 'todos' ? 'equipo' : ((U(S.f.asesor) || {}).nombre || '').split(' ')[0];
   const cols = etapasDe(p.id).map(e => {
     const cs = ab.filter(l => l.etapa_id === e.id).sort((a, b) => (a.prox_vence ? new Date(a.prox_vence).getTime() : 0) - (b.prox_vence ? new Date(b.prox_vence).getTime() : 0));
     return `<section class="colu" data-drop="${e.id}" aria-label="${esc(e.nombre)}">
-      <header><b>${esc(e.nombre)}</b> <span class="pill">${cs.length}</span><small>${usd(cs.reduce((a, l) => a + aUSD(l.valor, l.moneda), 0))} · prob. ${e.probabilidad}%</small></header>
+      <header><b>${esc(e.nombre)}</b> <span class="pill">${cs.length}</span><small>${usd(cs.reduce((a, l) => a + aUSD(l.valor, l.moneda), 0))}</small></header>
       ${cs.length ? cs.map(tarjeta).join('') : '<div class="vacio">Suelta un lead aquí</div>'}</section>`;
   }).join('');
   const huerf = ab.filter(l => !etapasDe(p.id).some(e => e.id === l.etapa_id)).length;
   return `${leyenda}<div class="kpis">
       <div class="kpi"><span>Leads abiertos</span><b>${ab.length}</b></div>
       <div class="kpi"><span>Valor del pipeline</span><b>${usd(tot)}</b><small>precio al cliente</small></div>
-      <div class="kpi"><span>Ponderado por probabilidad</span><b style="color:var(--teal)">${usd(pon)}</b></div>
-      ${esAdmin() ? `<div class="kpi" style="border-color:#F5D77A;background:#FFFBEB"><span>Ingreso propio ponderado</span><b>${usd(ab.reduce((a, l) => a + ingresoUSD(l) * prob(l) / 100, 0))}</b><small>solo lo ves tú</small></div>` : ''}
+      ${kpiMeta(gMes.length, meta, quien)}
+      <div class="kpi"><span>Por cerrar este mes</span><b>${porCerrar.length}</b><small>${porCerrar.length ? usd(porCerrar.reduce((a, l) => a + aUSD(l.valor, l.moneda), 0)) + ' · según "cierre estimado"' : 'pon "cierre estimado" en la ficha'}</small></div>
+      ${esAdmin() ? `<div class="kpi" style="border-color:#F5D77A;background:#FFFBEB"><span>Ingreso propio ganado este mes</span><b>${usd(gMes.reduce((a, l) => a + ingresoUSD(l), 0))}</b><small>en juego: ${usd(ab.reduce((a, l) => a + ingresoUSD(l), 0))} · solo tú</small></div>` : ''}
       <div class="kpi"><span>Vencidos / sin próxima acción</span><b class="rojo">${ab.filter(l => vence(l) === 'vencido').length} / ${ab.filter(l => vence(l) === 'sin').length}</b></div>
     </div>
     ${huerf ? `<div class="aviso a">${huerf} lead(s) están en una etapa desactivada y no aparecen en el tablero. Búscalos en Base de leads.</div>` : ''}
@@ -438,7 +476,7 @@ function tarjeta(l) {
   }
   return `<article class="card${cc}" draggable="true" data-id="${l.id}" data-act="abrir" tabindex="0" aria-label="${esc(l.nombre)}">
     ${banda}<div class="top"><div><span class="nom">${esc(l.nombre)}</span><span class="sub">${esc(sub)}</span></div>${jefe() ? avatar(l.asesor_id) : ''}</div>
-    <div class="val"><b>${fm(l.valor, l.moneda)}</b>${l.moneda === 'PEN' && l.valor ? `<span class="mut" style="font-size:12px">≈ ${usd(aUSD(l.valor, 'PEN'))}</span>` : ''}${l.fuente ? `<span class="pill">${esc(l.fuente)}</span>` : ''}</div>
+    <div class="val"><b>${fm(l.valor, l.moneda)}</b>${l.tarifa ? `<span class="mut" style="font-size:12px">${esc(l.tarifa)}${precioEspecial(l) ? ' · precio especial' : ''}</span>` : ''}${l.moneda === 'PEN' && l.valor ? `<span class="mut" style="font-size:12px">≈ ${usd(aUSD(l.valor, 'PEN'))}</span>` : ''}${l.fuente ? `<span class="pill">${esc(l.fuente)}</span>` : ''}</div>
     <div class="bot"><span class="due ${v}">${v === 'sin' ? 'Sin próxima acción' : esc((l.prox_accion || 'Seguimiento') + ' · ' + cuando(l.prox_vence))}</span>${wa ? `<a class="wa" href="${esc(wa)}" target="_blank" rel="noopener" data-act="wa" aria-label="WhatsApp a ${esc(l.nombre)}">${ICO_WA}</a>` : ''}</div>
     <span class="dias">${d === 0 ? 'Entró hoy a esta etapa' : d + ' día' + (d === 1 ? '' : 's') + ' en esta etapa'}${d > S.config.dias_estancado ? ' · <b class="rojo">estancado</b>' : ''}</span>
   </article>`;
@@ -447,7 +485,7 @@ A.pipe = el => { S.pipeId = el.dataset.id; renderMain(); };
 A.wa = () => { /* el enlace se abre solo; no abrir la ficha */ };
 A.abrir = el => abrirFicha(el.dataset.id);
 A.nuevo = () => abrirFicha(null);
-A.verCerr = el => { S.base = { estado: el.dataset.e, pipe: S.pipeId, asesor: '', college: '', q: '', desde: '', hasta: '' }; S.vista = 'base'; render(); };
+A.verCerr = el => { S.base = { estado: el.dataset.e, pipe: S.pipeId, asesor: '', college: '', q: '', desde: '', hasta: '', sel: new Set() }; S.vista = 'base'; render(); };
 C.fAsesor = el => { S.f.asesor = el.value; renderMain(); };
 C.fVenc = el => { S.f.vencidos = el.checked; renderMain(); };
 A.fCol = el => { S.f.college = el.dataset.v; renderMain(); };
@@ -495,7 +533,8 @@ function mCierre(id, tipo) {
     ? `<header><div><h2 class="verde">Marcar como GANADO</h2><span class="mut">${esc(l.nombre)} · ${esc(p.nombre)}</span></div><button class="x" data-act="cerrar" aria-label="Cerrar">×</button></header>
       <form class="col" data-sub="cierre" data-id="${id}" data-tipo="ganado">
         <div class="grid2"><label class="f">Valor de cierre (lo que paga el cliente)<input type="number" step="0.01" min="0" name="valor" value="${l.valor ?? p.valor_default ?? ''}" required autofocus></label>
-        <label class="f">Moneda<select name="moneda"><option ${l.moneda === 'USD' ? 'selected' : ''}>USD</option><option ${l.moneda === 'PEN' ? 'selected' : ''}>PEN</option></select></label></div>
+        <label class="f">Moneda<select name="moneda"><option value="USD" ${l.moneda === 'USD' ? 'selected' : ''}>USD · dólares</option><option value="PEN" ${l.moneda === 'PEN' ? 'selected' : ''}>S/ · soles</option></select></label></div>
+        <span class="mut" style="font-size:12px;margin-top:-6px">Es el monto final que paga el cliente: corrígelo si hubo descuento.</span>
         ${usaCol(l.pipeline_id) ? (() => { const mios = colsDe(id).map(x => x.college_id), ops = mios.concat(colesActivos().map(c => c.id).filter(c => !mios.includes(c))); return `<label class="f">¿En qué college se matriculó? *<select name="college" required><option value="">— Elige —</option>${ops.map((c, i) => `<option value="${c}" ${i === 0 && mios.length ? 'selected' : ''}>${esc((Col(c) || {}).nombre)}${mios.includes(c) ? '' : ' (no estaba en su lista)'}</option>`).join('')}</select></label>`; })() : ''}
         <label class="f">Nota (opcional)<textarea name="nota" rows="2" placeholder="Ej.: pagó reserva por Interbank"></textarea></label>
         <div class="aviso">El lead sale del tablero y pasa a la <b>base de cerrados</b>. El administrador lo registra como venta en el panel financiero.</div>
@@ -541,7 +580,7 @@ async function abrirFicha(id) {
 }
 function pintarFicha() {
   const id = S.ficha.id, nuevo = !id, pipe0 = P(S.pipeId) || pipesActivos()[0] || {};
-  const l = nuevo ? { pipeline_id: pipe0.id, etapa_id: (etapasDe(pipe0.id)[0] || {}).id, moneda: pipe0.moneda || 'USD', valor: pipe0.valor_default, pais: 'Perú', asesor_id: S.yo.user_id, estado: 'abierto', etiquetas: [], prox_accion: 'Primer contacto', prox_vence: manana9() } : L(id);
+  const l = nuevo ? { pipeline_id: pipe0.id, etapa_id: (etapasDe(pipe0.id)[0] || {}).id, moneda: pipe0.moneda || 'USD', valor: pipe0.valor_default ?? (tarifaDef(pipe0.id) || {}).valor, tarifa: (tarifaDef(pipe0.id) || {}).nombre, pais: 'Perú', asesor_id: S.yo.user_id, estado: 'abierto', etiquetas: [], prox_accion: 'Primer contacto', prox_vence: manana9() } : L(id);
   const cerrado = l.estado !== 'abierto', bloq = cerrado && !jefe(), dis = bloq ? 'disabled' : '';
   const p = P(l.pipeline_id) || {}, ets = etapasDe(l.pipeline_id), iE = ets.findIndex(e => e.id === l.etapa_id), wa = waLink(l), pl = S.privLead[id] || {};
   const t = (n, et, ex = '') => `<label class="f">${et}<input type="text" name="${n}" value="${esc(l[n] ?? '')}" ${dis} ${ex}></label>`;
@@ -572,8 +611,9 @@ function pintarFicha() {
         <div class="sec"><h3>Negocio</h3>
           <div class="grid2"><label class="f">Pipeline<select name="pipeline_id" data-chg="fPipe" ${dis}>${pipesActivos().concat(p.activo === false ? [p] : []).map(x => `<option value="${x.id}" ${x.id === l.pipeline_id ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select></label>
             <label class="f">Etapa<select name="etapa_id" ${dis}>${optEtapas(l.pipeline_id, l.etapa_id)}</select></label></div>
-          <div class="grid3"><label class="f">Valor (precio al cliente)<input type="number" step="0.01" min="0" name="valor" value="${l.valor ?? ''}" ${dis}></label>
-            <label class="f">Moneda<select name="moneda" ${dis}><option ${l.moneda === 'USD' ? 'selected' : ''}>USD</option><option ${l.moneda === 'PEN' ? 'selected' : ''}>PEN</option></select></label>
+          ${S.v101 ? `<div id="tarifaBox" style="display:${precios(l.pipeline_id).length ? '' : 'none'}"><label class="f">Tarifa (opcional: llena el monto, luego puedes cambiarlo)<select name="tarifa" data-chg="fTarifa" ${dis}>${optTarifas(l.pipeline_id, l.tarifa)}</select></label></div>` : ''}
+          <div class="grid3"><label class="f">Valor (precio al cliente, editable)<input type="number" step="0.01" min="0" name="valor" value="${l.valor ?? ''}" ${dis}></label>
+            <label class="f">Moneda<select name="moneda" ${dis}><option value="USD" ${l.moneda === 'USD' ? 'selected' : ''}>USD · dólares</option><option value="PEN" ${l.moneda === 'PEN' ? 'selected' : ''}>S/ · soles</option></select></label>
             <label class="f">Fuente<input type="text" name="fuente" list="dlFuentes" value="${esc(l.fuente || '')}" ${dis}><datalist id="dlFuentes">${FUENTES.map(x => `<option value="${x}">`).join('')}</datalist></label></div>
           <div class="grid3"><label class="f">Cierre estimado<input type="date" name="cierre_estimado" value="${esc(l.cierre_estimado || '')}" ${dis}></label>
             <label class="f">Fecha límite<input type="date" name="fecha_limite" value="${esc(l.fecha_limite || '')}" ${dis}></label>${t('fecha_limite_desc', '¿Límite de qué?', 'placeholder="Deadline application, cita visa…"')}</div>
@@ -628,6 +668,12 @@ async function guardarCols(id) {
   if (JSON.stringify(items) === S.ficha.cols0) return;
   S.lc[id] = await q(sb.rpc('crm_set_colleges', { p_lead: id, p_items: items.map(x => ({ college_id: x.college_id, principal: x.principal, estado: x.estado, term: x.term || null })) }));
 }
+function optTarifas(pid, sel) {
+  const ps = precios(pid), mon = (P(pid) || {}).moneda === 'PEN' ? 'S/ ' : 'USD ';
+  return `<option value="">Sin tarifa · monto manual</option>` + ps.map(x => `<option value="${esc(x.nombre)}" data-valor="${x.valor}" ${x.nombre === sel ? 'selected' : ''}>${esc(x.nombre)} · ${mon}${Number(x.valor).toLocaleString('en-US')}</option>`).join('');
+}
+function precioEspecial(l) { const t = precios(l.pipeline_id).find(x => x.nombre === l.tarifa); return !!t && (Number(t.valor) !== Number(l.valor) || l.moneda !== ((P(l.pipeline_id) || {}).moneda || 'USD')); }
+C.fTarifa = el => { const o = el.selectedOptions[0]; if (o && o.dataset.valor) { el.form.valor.value = o.dataset.valor; el.form.moneda.value = (P(el.form.pipeline_id.value) || {}).moneda || 'USD'; } };
 const v2bg = l => l.estado !== 'abierto' ? '' : vence(l) === 'vencido' ? 'background:var(--redL);border-color:#F4C7C2' : vence(l) === 'hoy' ? 'background:var(--ambL);border-color:#F5D77A' : '';
 const optEtapas = (pid, sel) => etapasDe(pid, true).filter(e => e.activo || e.id === sel).map(e => `<option value="${e.id}" ${e.id === sel ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('');
 function pintarHist() {
@@ -635,7 +681,7 @@ function pintarHist() {
   const color = { whatsapp: 'var(--grn)', llamada: 'var(--teal)', reunion: '#3B4F8F', email: '#8A4B08', etapa: 'var(--gold)', cierre: 'var(--red)' };
   h.innerHTML = a.length ? a.map(x => `<li><span class="p" style="background:${color[x.tipo] || 'var(--mut)'}"></span><div><b>${TIPOS[x.tipo] || x.tipo}</b>${x.resultado ? ` · ${esc(x.resultado)}` : ''} <span class="mut">· ${fFechaHora(x.created_at)} · ${esc((U(x.user_id) || {}).nombre || 'Sistema')}</span>${x.detalle ? `<div>${esc(x.detalle)}</div>` : ''}</div></li>`).join('') : '<li class="mut">Sin movimientos todavía.</li>';
 }
-C.fPipe = el => { const f = el.form, p = P(el.value) || {}; f.etapa_id.innerHTML = optEtapas(el.value, null); const cs = $('#colSec'); if (cs) cs.style.display = usaCol(el.value) ? '' : 'none'; if (!S.ficha.id) { f.moneda.value = p.moneda || 'USD'; f.valor.value = p.valor_default ?? ''; } };
+C.fPipe = el => { const f = el.form, p = P(el.value) || {}; f.etapa_id.innerHTML = optEtapas(el.value, null); if (f.tarifa) { const d = tarifaDef(el.value); f.tarifa.innerHTML = optTarifas(el.value, d && d.nombre); $('#tarifaBox').style.display = precios(el.value).length ? '' : 'none'; if (!S.ficha.id && d && p.valor_default == null) f.valor.value = d.valor; } const cs = $('#colSec'); if (cs) cs.style.display = usaCol(el.value) ? '' : 'none'; if (!S.ficha.id) { f.moneda.value = p.moneda || 'USD'; f.valor.value = p.valor_default ?? ''; } };
 function leerLead(f) {
   const v = n => f.elements[n] ? String(f.elements[n].value).trim() : '', o = {};
   ['nombre', 'email', 'ciudad', 'pais', 'colegio', 'grado', 'nivel_ingles', 'programa_interes', 'apoderado_nombre', 'apoderado_parentesco', 'apoderado_email', 'fuente', 'fecha_limite_desc', 'notas'].forEach(n => { o[n] = v(n) || null; });
@@ -643,6 +689,7 @@ function leerLead(f) {
   o.telefono = normTel(v('telefono')); o.apoderado_telefono = normTel(v('apoderado_telefono'));
   if (o.email) o.email = o.email.toLowerCase(); if (o.apoderado_email) o.apoderado_email = o.apoderado_email.toLowerCase();
   o.valor = v('valor') === '' ? null : Number(v('valor')); o.moneda = v('moneda') || 'USD';
+  if (S.v101 && f.elements.tarifa) o.tarifa = v('tarifa') || null;
   o.pipeline_id = v('pipeline_id'); o.etapa_id = v('etapa_id');
   o.etiquetas = v('etiquetas').split(/[,;]/).map(s => s.trim()).filter(Boolean);
   o.consentimiento = !!f.elements.consentimiento.checked;
@@ -745,23 +792,137 @@ function vBase() {
 }
 function tablaBase() {
   const fs = filasBase(), gan = fs.filter(l => l.estado === 'ganado'), per = fs.filter(l => l.estado === 'perdido');
-  return `<div class="fila mut" style="margin-bottom:8px"><b style="color:var(--ink)">${fs.length} leads</b><span>· ${gan.length} ganados (${usd(gan.reduce((a, l) => a + aUSD(l.valor_cierre, l.moneda_cierre), 0))})</span><span>· ${per.length} perdidos</span>${gan.length + per.length ? `<span>· tasa de cierre ${Math.round(gan.length / (gan.length + per.length) * 100)}%</span>` : ''}<span style="margin-left:auto">Las fechas filtran por cierre (cerrados) o por ingreso (abiertos).</span></div>
-    <div class="caja sx" style="padding:0"><table class="tabla"><thead><tr><th>Estado</th><th>Nombre</th><th>Pipeline</th><th>Etapa</th>${S.colleges.length ? '<th>College</th>' : ''}${jefe() ? '<th>Asesor</th>' : ''}<th>Fuente</th><th class="r">Valor</th><th>Ingreso</th><th>Cierre</th><th>Motivo</th></tr></thead><tbody>
-    ${fs.slice(0, 300).map(l => `<tr class="clic" data-act="abrir" data-id="${l.id}"><td><span class="pill ${{ ganado: 'g', perdido: 'r', abierto: 't' }[l.estado]}">${l.estado}</span></td><td class="b">${esc(l.nombre)}</td><td>${esc((P(l.pipeline_id) || {}).nombre)}</td><td>${esc((E(l.etapa_id) || {}).nombre)}</td>${S.colleges.length ? `<td>${(() => { const c = principalDe(l.id); return c ? `<span class="cchip" style="border-color:${c.color};color:${c.color}" title="${esc(c.nombre)}">${esc(c.sigla)}</span>${colsDe(l.id).length > 1 ? ` <span class="mut">+${colsDe(l.id).length - 1}</span>` : ''}` : ''; })()}</td>` : ''}${jefe() ? `<td>${esc((U(l.asesor_id) || {}).nombre || 'Sin asignar')}</td>` : ''}<td>${esc(l.fuente || '')}</td><td class="r">${l.estado === 'ganado' ? fm(l.valor_cierre, l.moneda_cierre) : fm(l.valor, l.moneda)}</td><td>${fFecha(l.created_at)}</td><td>${l.cerrado_en ? fFecha(l.cerrado_en) : ''}</td><td>${esc(l.motivo_perdida || '')}</td></tr>`).join('') || `<tr><td colspan="11" class="mut" style="padding:24px;text-align:center">Sin resultados con esos filtros.</td></tr>`}
+  const sel = S.base.sel, vis = fs.slice(0, 300), todos = vis.length && vis.every(l => sel.has(l.id));
+  const barra = jefe() && sel.size ? `<div class="caja fila noimp" style="margin-bottom:10px;border-color:var(--teal);background:var(--tealL)"><b>${sel.size} seleccionado${sel.size === 1 ? '' : 's'}</b><span>Reasignar a</span><div style="width:220px"><select id="reaA" aria-label="Reasignar a">${asignables().map(u => `<option value="${u.user_id}">${esc(u.nombre)}</option>`).join('')}${esAdmin() ? '<option value="">Sin asignar</option>' : ''}</select></div><button class="btn pri sm" data-act="reasignar">Reasignar</button><button class="btn sm" data-act="selNada">Quitar selección</button></div>` : '';
+  return `${barra}<div class="fila mut" style="margin-bottom:8px"><b style="color:var(--ink)">${fs.length} leads</b><span>· ${gan.length} ganados (${usd(gan.reduce((a, l) => a + aUSD(l.valor_cierre, l.moneda_cierre), 0))})</span><span>· ${per.length} perdidos</span>${gan.length + per.length ? `<span>· tasa de cierre ${Math.round(gan.length / (gan.length + per.length) * 100)}%</span>` : ''}<span style="margin-left:auto">Las fechas filtran por cierre (cerrados) o por ingreso (abiertos).</span></div>
+    <div class="caja sx" style="padding:0"><table class="tabla"><thead><tr>${jefe() ? `<th data-act="nada"><input type="checkbox" data-chg="selTodo" ${todos ? 'checked' : ''} aria-label="Seleccionar todos"></th>` : ''}<th>Estado</th><th>Nombre</th><th>Pipeline</th><th>Etapa</th>${S.colleges.length ? '<th>College</th>' : ''}${jefe() ? '<th>Asesor</th>' : ''}<th>Fuente</th><th class="r">Valor</th><th>Ingreso</th><th>Cierre</th><th>Motivo</th></tr></thead><tbody>
+    ${vis.map(l => `<tr class="clic" data-act="abrir" data-id="${l.id}">${jefe() ? `<td data-act="nada"><input type="checkbox" data-chg="selUno" data-id="${l.id}" ${sel.has(l.id) ? 'checked' : ''} aria-label="Seleccionar ${esc(l.nombre)}"></td>` : ''}<td><span class="pill ${{ ganado: 'g', perdido: 'r', abierto: 't' }[l.estado]}">${l.estado}</span></td><td class="b">${esc(l.nombre)}</td><td>${esc((P(l.pipeline_id) || {}).nombre)}</td><td>${esc((E(l.etapa_id) || {}).nombre)}</td>${S.colleges.length ? `<td>${(() => { const c = principalDe(l.id); return c ? `<span class="cchip" style="border-color:${c.color};color:${c.color}" title="${esc(c.nombre)}">${esc(c.sigla)}</span>${colsDe(l.id).length > 1 ? ` <span class="mut">+${colsDe(l.id).length - 1}</span>` : ''}` : ''; })()}</td>` : ''}${jefe() ? `<td>${esc((U(l.asesor_id) || {}).nombre || 'Sin asignar')}</td>` : ''}<td>${esc(l.fuente || '')}</td><td class="r">${l.estado === 'ganado' ? fm(l.valor_cierre, l.moneda_cierre) : fm(l.valor, l.moneda)}</td><td>${fFecha(l.created_at)}</td><td>${l.cerrado_en ? fFecha(l.cerrado_en) : ''}</td><td>${esc(l.motivo_perdida || '')}</td></tr>`).join('') || `<tr><td colspan="12" class="mut" style="padding:24px;text-align:center">Sin resultados con esos filtros.</td></tr>`}
     </tbody></table></div>${fs.length > 300 ? `<p class="mut">Se muestran los primeros 300. ${esAdmin() ? 'La exportación incluye los ' + fs.length + '.' : 'Afina los filtros para ver el resto.'}</p>` : ''}`;
 }
-C.base = el => { S.base[el.dataset.k] = el.value; $('#baseT').innerHTML = tablaBase(); };
+C.base = el => { S.base[el.dataset.k] = el.value; S.base.sel.clear(); $('#baseT').innerHTML = tablaBase(); };
+A.nada = () => {};
+C.selUno = el => { el.checked ? S.base.sel.add(el.dataset.id) : S.base.sel.delete(el.dataset.id); $('#baseT').innerHTML = tablaBase(); };
+C.selTodo = el => { filasBase().slice(0, 300).forEach(l => el.checked ? S.base.sel.add(l.id) : S.base.sel.delete(l.id)); $('#baseT').innerHTML = tablaBase(); };
+A.selNada = () => { S.base.sel.clear(); $('#baseT').innerHTML = tablaBase(); };
+A.reasignar = async () => {
+  const ids = Array.from(S.base.sel), dest = $('#reaA').value || null, nom = dest ? U(dest).nombre : 'Sin asignar';
+  if (!confirm(`¿Reasignar ${ids.length} lead(s) a ${nom}?`)) return;
+  try { for (let i = 0; i < ids.length; i += 200) { const d = await q(sb.from('crm_leads').update({ asesor_id: dest }).in('id', ids.slice(i, i + 200)).select()); d.forEach(x => Object.assign(L(x.id), x)); }
+    S.base.sel.clear(); renderMain(); toast(`${ids.length} lead(s) reasignados a ${nom}.`); } catch (e) { toast(msgErr(e), 'err'); }
+};
 I.baseQ = el => { S.base.q = el.value; $('#baseT').innerHTML = tablaBase(); };
 A.exportar = async el => {
   if (!esAdmin()) return;
   const fs = filasBase(), lote = id => (S.lotes.find(x => x.id === id) || {}).nombre || '';
-  const cab = ['Estado', 'Pipeline', 'Etapa', 'Nombre', 'WhatsApp', 'Email', 'Colegio', 'Grado', 'Ciudad', 'País', 'Apoderado', 'Parentesco', 'WhatsApp apoderado', 'Email apoderado', 'Fuente', 'Lote', 'Etiquetas', 'Asesor', 'College principal', 'Estado en el principal', 'Otros colleges', 'Valor', 'Moneda', 'Valor de cierre', 'Moneda de cierre', 'Motivo de pérdida', 'Fecha de ingreso', 'Fecha de cierre', 'Días hasta el cierre', 'Panel financiero', 'Autorizó contacto', 'Notas'];
+  const cab = ['Estado', 'Pipeline', 'Etapa', 'Nombre', 'WhatsApp', 'Email', 'Colegio', 'Grado', 'Ciudad', 'País', 'Apoderado', 'Parentesco', 'WhatsApp apoderado', 'Email apoderado', 'Fuente', 'Lote', 'Etiquetas', 'Asesor', 'College principal', 'Estado en el principal', 'Otros colleges', 'Tarifa', 'Valor', 'Moneda', 'Valor de cierre', 'Moneda de cierre', 'Motivo de pérdida', 'Fecha de ingreso', 'Fecha de cierre', 'Días hasta el cierre', 'Panel financiero', 'Autorizó contacto', 'Notas'];
   const f10 = x => x ? aInput(x).slice(0, 10) : '';
-  const filas = [cab].concat(fs.map(l => [l.estado, (P(l.pipeline_id) || {}).nombre, (E(l.etapa_id) || {}).nombre, l.nombre, l.telefono, l.email, l.colegio, l.grado, l.ciudad, l.pais, l.apoderado_nombre, l.apoderado_parentesco, l.apoderado_telefono, l.apoderado_email, l.fuente, lote(l.lote_id), (l.etiquetas || []).join(', '), (U(l.asesor_id) || {}).nombre || 'Sin asignar', (principalDe(l.id) || {}).nombre, (colsDe(l.id)[0] ? ESTADOS_COL[colsDe(l.id)[0].estado] : ''), colsDe(l.id).slice(1).map(x => ((Col(x.college_id) || {}).nombre || '') + ' (' + ESTADOS_COL[x.estado] + ')').join('; '), l.valor, l.moneda, l.valor_cierre, l.moneda_cierre, l.motivo_perdida, f10(l.created_at), f10(l.cerrado_en), l.cerrado_en ? Math.round((new Date(l.cerrado_en) - new Date(l.created_at)) / 864e5) : '', l.fin_estado || '', l.consentimiento ? 'Sí' : 'No', l.notas].map(x => x == null ? '' : x)));
+  const filas = [cab].concat(fs.map(l => [l.estado, (P(l.pipeline_id) || {}).nombre, (E(l.etapa_id) || {}).nombre, l.nombre, l.telefono, l.email, l.colegio, l.grado, l.ciudad, l.pais, l.apoderado_nombre, l.apoderado_parentesco, l.apoderado_telefono, l.apoderado_email, l.fuente, lote(l.lote_id), (l.etiquetas || []).join(', '), (U(l.asesor_id) || {}).nombre || 'Sin asignar', (principalDe(l.id) || {}).nombre, (colsDe(l.id)[0] ? ESTADOS_COL[colsDe(l.id)[0].estado] : ''), colsDe(l.id).slice(1).map(x => ((Col(x.college_id) || {}).nombre || '') + ' (' + ESTADOS_COL[x.estado] + ')').join('; '), l.tarifa, l.valor, l.moneda, l.valor_cierre, l.moneda_cierre, l.motivo_perdida, f10(l.created_at), f10(l.cerrado_en), l.cerrado_en ? Math.round((new Date(l.cerrado_en) - new Date(l.created_at)) / 864e5) : '', l.fin_estado || '', l.consentimiento ? 'Sí' : 'No', l.notas].map(x => x == null ? '' : x)));
   const nombre = `GO_CRM_${S.base.estado}_${aInput(new Date().toISOString()).slice(0, 10)}`;
   if (el.dataset.f === 'xlsx') { try { const X = await cargarXLSX(), wb = X.utils.book_new(); X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(filas), 'Leads'); X.writeFile(wb, nombre + '.xlsx'); return toast(`Exportados ${fs.length} leads.`); } catch (e) { toast('No se pudo generar Excel; descargo CSV.', 'err'); } }
   const cel = v => { let s = String(v); if (/^[=@]/.test(s) || /^[+\-](?!\d)/.test(s)) s = "'" + s; return /[",\n\r;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   bajar(nombre + '.csv', '﻿' + filas.map(r => r.map(cel).join(',')).join('\r\n'), 'text/csv;charset=utf-8'); toast(`Exportados ${fs.length} leads.`);
+};
+
+/* ------------------------------ REPORTES ---------------------------- */
+const PERIODOS = [['hoy', 'Hoy'], ['semana', 'Esta semana'], ['7d', 'Últimos 7 días'], ['mes', 'Este mes'], ['mesAnt', 'Mes anterior'], ['custom', 'Personalizado']];
+function rangoRep() {
+  const r = S.rep, h = new Date(), d0 = new Date(), d1 = new Date(); d0.setHours(0, 0, 0, 0); d1.setHours(23, 59, 59, 999);
+  if (r.periodo === 'semana') d0.setDate(d0.getDate() - ((d0.getDay() + 6) % 7));
+  else if (r.periodo === '7d') d0.setDate(d0.getDate() - 6);
+  else if (r.periodo === 'mes') d0.setDate(1);
+  else if (r.periodo === 'mesAnt') { d0.setDate(1); d0.setMonth(d0.getMonth() - 1); d1.setDate(0); }
+  else if (r.periodo === 'custom') { if (r.desde) d0.setTime(new Date(r.desde + 'T00:00').getTime()); if (r.hasta) d1.setTime(new Date(r.hasta + 'T23:59:59').getTime()); }
+  return [d0, d1];
+}
+async function cargarRep() {
+  const [d0, d1] = rangoRep(), clave = d0.toISOString() + d1.toISOString();
+  if (S.rep.acts && S.rep.clave === clave) return;
+  S.rep.acts = null; S.rep.clave = clave;
+  try { S.rep.acts = await todo('crm_actividades', c => c.gte('created_at', d0.toISOString()).lte('created_at', d1.toISOString()).order('created_at').order('id')); }
+  catch (e) { S.rep.acts = []; toast(msgErr(e), 'err'); }
+  if (S.vista === 'reporte') renderMain();
+}
+function datosRep() {
+  const [d0, d1] = rangoRep(), r = S.rep, en = iso => iso && new Date(iso) >= d0 && new Date(iso) <= d1;
+  const equipo = !jefe() ? [S.yo] : S.usuarios.filter(u => esAdmin() || u.user_id === S.yo.user_id || u.supervisor_id === S.yo.user_id);
+  const quienes = r.asesor === 'todos' ? equipo : equipo.filter(u => u.user_id === r.asesor);
+  const ids = new Set(quienes.map(u => u.user_id)), incluirSin = esAdmin() && r.asesor === 'todos';
+  const leads = S.leads.filter(l => ids.has(l.asesor_id) || (incluirSin && !l.asesor_id)), lid = new Set(leads.map(l => l.id));
+  const acts = (r.acts || []).filter(a => lid.has(a.lead_id));
+  const CONT = ['whatsapp', 'llamada', 'reunion', 'email'];
+  const calc = (ls, as) => { const ab = ls.filter(l => l.estado === 'abierto'), g = ls.filter(l => l.estado === 'ganado' && en(l.cerrado_en)), p = ls.filter(l => l.estado === 'perdido' && en(l.cerrado_en));
+    return { nuevos: ls.filter(l => en(l.created_at)).length, contactos: as.filter(a => CONT.includes(a.tipo)).length, movs: as.filter(a => a.tipo === 'etapa').length,
+      g, p, valorG: g.reduce((a, l) => a + aUSD(l.valor_cierre, l.moneda_cierre), 0), ingG: g.reduce((a, l) => a + ingresoUSD(l), 0),
+      abiertos: ab.length, vencidos: ab.filter(l => vence(l) === 'vencido').length, sinAccion: ab.filter(l => vence(l) === 'sin').length,
+      estancados: ab.filter(l => dias(l.etapa_desde) > S.config.dias_estancado).length, gMes: ls.filter(ganadoEsteMes).length }; };
+  const tot = calc(leads, acts);
+  tot.meta = quienes.reduce((a, u) => a + metaTotal(u.user_id), 0);
+  const porAsesor = quienes.map(u => { const ls = leads.filter(l => l.asesor_id === u.user_id), x = calc(ls, acts.filter(a => ls.some(l => l.id === a.lead_id))); x.u = u; x.meta = metaTotal(u.user_id); return x; });
+  const porPipe = pipesActivos().map(pp => { const ls = leads.filter(l => l.pipeline_id === pp.id); return { p: pp, x: calc(ls, acts.filter(a => ls.some(l => l.id === a.lead_id))) }; }).filter(o => o.x.abiertos || o.x.g.length || o.x.p.length || o.x.nuevos);
+  const h7 = hoy0() + 8 * 864e5, agenda = leads.filter(l => l.estado === 'abierto' && (vence(l) === 'vencido' || (l.prox_vence && dia0(l.prox_vence) < h7))).sort((a, b) => new Date(a.prox_vence) - new Date(b.prox_vence));
+  const titulo = !jefe() ? S.yo.nombre : r.asesor === 'todos' ? (esAdmin() ? 'Todo el equipo' : 'Mi equipo') : (U(r.asesor) || {}).nombre;
+  return { d0, d1, tot, porAsesor, porPipe, agenda, titulo };
+}
+function vReporte() {
+  if (!S.rep.acts) { cargarRep(); return '<h1>Reportes</h1><div class="caja">Preparando el reporte…</div>'; }
+  const r = S.rep, D = datosRep(), t = D.tot, f = x => fFecha(x.toISOString());
+  const ops = PERIODOS.map(([v, n]) => `<option value="${v}" ${r.periodo === v ? 'selected' : ''}>${n}</option>`).join('');
+  const fila = (l, extra) => `<tr><td class="b">${esc(l.nombre)}</td><td>${esc((P(l.pipeline_id) || {}).nombre)}${principalDe(l.id) && usaCol(l.pipeline_id) ? ' · ' + esc(principalDe(l.id).sigla) : ''}</td>${jefe() ? `<td>${esc((U(l.asesor_id) || {}).nombre || 'Sin asignar')}</td>` : ''}${extra}</tr>`;
+  return `<div class="fila noimp"><h1 style="margin-right:auto">Reportes</h1>
+      <label class="f" style="width:170px">Periodo<select data-chg="rep" data-k="periodo">${ops}</select></label>
+      ${r.periodo === 'custom' ? `<label class="f" style="width:150px">Desde<input type="date" value="${r.desde}" data-chg="rep" data-k="desde"></label><label class="f" style="width:150px">Hasta<input type="date" value="${r.hasta}" data-chg="rep" data-k="hasta"></label>` : ''}
+      ${jefe() ? `<label class="f" style="width:200px">Asesor<select data-chg="rep" data-k="asesor"><option value="todos">${esAdmin() ? 'Todo el equipo' : 'Mi equipo'}</option>${D.porAsesor.length || r.asesor !== 'todos' ? S.usuarios.filter(u => esAdmin() || u.user_id === S.yo.user_id || u.supervisor_id === S.yo.user_id).map(u => `<option value="${u.user_id}" ${r.asesor === u.user_id ? 'selected' : ''}>${esc(u.nombre)}</option>`).join('') : ''}</select></label>` : ''}
+      <button class="btn" data-act="repImprimir" style="align-self:flex-end">Imprimir / PDF</button><button class="btn pri" data-act="repExcel" style="align-self:flex-end">Descargar Excel</button></div>
+    <section class="caja col">
+      <div class="rep-cab"><img src="${LOGO}" alt="Global Opportunities"><div style="flex:1"><h2 style="font-size:18px">Reporte de gestión comercial · ${esc(D.titulo)}</h2><span class="mut">${f(D.d0)} al ${f(D.d1)} · generado el ${fFechaHora(new Date().toISOString())}</span></div></div>
+      <div class="kpis">
+        <div class="kpi"><span>Leads nuevos</span><b>${t.nuevos}</b></div>
+        <div class="kpi"><span>Contactos registrados</span><b>${t.contactos}</b><small>WhatsApp, llamadas, reuniones, emails</small></div>
+        <div class="kpi"><span>Movimientos de etapa</span><b>${t.movs}</b></div>
+        <div class="kpi"><span>Ganados</span><b class="verde">${t.g.length}</b><small>${usd(t.valorG)}</small></div>
+        <div class="kpi"><span>Perdidos</span><b>${t.p.length}</b><small>${t.g.length + t.p.length ? 'tasa de cierre ' + Math.round(t.g.length / (t.g.length + t.p.length) * 100) + '%' : ''}</small></div>
+        ${kpiMeta(t.gMes, t.meta, 'mes en curso')}
+        <div class="kpi"><span>Abiertos hoy</span><b>${t.abiertos}</b><small>${t.estancados} estancados</small></div>
+        <div class="kpi"><span>Vencidos / sin acción</span><b class="rojo">${t.vencidos} / ${t.sinAccion}</b></div>
+        ${esAdmin() ? `<div class="kpi" style="border-color:#F5D77A;background:#FFFBEB"><span>Ingreso propio ganado</span><b>${usd(t.ingG)}</b><small>solo tú</small></div>` : ''}
+      </div></section>
+    ${jefe() && r.asesor === 'todos' ? `<section class="caja col"><h2>Por asesor</h2><div class="sx"><table class="tabla"><thead><tr><th>Asesor</th><th class="r">Nuevos</th><th class="r">Contactos</th><th class="r">Movimientos</th><th class="r">Ganados</th><th class="r">Valor ganado</th><th class="r">Perdidos</th><th class="r">Meta del mes</th><th class="r">Abiertos</th><th class="r">Vencidos</th></tr></thead><tbody>
+      ${D.porAsesor.map(x => `<tr><td class="b">${esc(x.u.nombre)}</td><td class="r">${x.nuevos}</td><td class="r">${x.contactos}</td><td class="r">${x.movs}</td><td class="r b verde">${x.g.length}</td><td class="r">${usd(x.valorG)}</td><td class="r">${x.p.length}</td><td class="r">${x.gMes}${x.meta ? ' / ' + x.meta : ''}</td><td class="r">${x.abiertos}</td><td class="r ${x.vencidos ? 'rojo b' : ''}">${x.vencidos}</td></tr>`).join('')}</tbody></table></div></section>` : ''}
+    <section class="caja col"><h2>Por pipeline</h2><div class="sx"><table class="tabla"><thead><tr><th>Pipeline</th><th class="r">Nuevos</th><th class="r">Ganados</th><th class="r">Perdidos</th><th class="r">Abiertos</th><th class="r">Vencidos</th></tr></thead><tbody>
+      ${D.porPipe.map(o => `<tr><td class="b">${esc(o.p.nombre)}</td><td class="r">${o.x.nuevos}</td><td class="r verde b">${o.x.g.length}</td><td class="r">${o.x.p.length}</td><td class="r">${o.x.abiertos}</td><td class="r">${o.x.vencidos}</td></tr>`).join('') || '<tr><td colspan="6" class="mut">Sin movimiento.</td></tr>'}</tbody></table></div></section>
+    <div class="fila" style="align-items:stretch">
+      <section class="caja col" style="flex:1 1 420px"><h2>Ganados del periodo</h2><div class="sx"><table class="tabla"><thead><tr><th>Lead</th><th>Pipeline</th>${jefe() ? '<th>Asesor</th>' : ''}<th class="r">Valor</th><th>Fecha</th></tr></thead><tbody>
+        ${t.g.map(l => fila(l, `<td class="r">${fm(l.valor_cierre, l.moneda_cierre)}</td><td>${fFecha(l.cerrado_en)}</td>`)).join('') || `<tr><td colspan="5" class="mut">Ninguno en este periodo.</td></tr>`}</tbody></table></div></section>
+      <section class="caja col" style="flex:1 1 360px"><h2>Perdidos del periodo</h2><div class="sx"><table class="tabla"><thead><tr><th>Lead</th><th>Pipeline</th>${jefe() ? '<th>Asesor</th>' : ''}<th>Motivo</th></tr></thead><tbody>
+        ${t.p.map(l => fila(l, `<td>${esc(l.motivo_perdida || '')}</td>`)).join('') || `<tr><td colspan="4" class="mut">Ninguno en este periodo.</td></tr>`}</tbody></table></div></section>
+    </div>
+    <section class="caja col"><h2>Agenda: vencidos y próximos 7 días</h2><div class="sx"><table class="tabla"><thead><tr><th>Lead</th><th>Pipeline</th>${jefe() ? '<th>Asesor</th>' : ''}<th>Próxima acción</th><th>Cuándo</th></tr></thead><tbody>
+      ${D.agenda.slice(0, 150).map(l => fila(l, `<td>${esc(l.prox_accion || '')}</td><td class="${vence(l) === 'vencido' ? 'rojo b' : ''}">${cuando(l.prox_vence)}</td>`)).join('') || `<tr><td colspan="5" class="mut">Nada pendiente.</td></tr>`}</tbody></table></div></section>
+    <p class="mut">El reporte no incluye teléfonos ni correos de los leads.</p>`;
+}
+C.rep = el => { S.rep[el.dataset.k] = el.value; if (el.dataset.k !== 'asesor') S.rep.acts = null; renderMain(); };
+A.repImprimir = () => window.print();
+A.repExcel = async () => {
+  const D = datosRep(), t = D.tot, f = x => aInput(x.toISOString()).slice(0, 10), nombre = `GO_Reporte_${sinTildes(D.titulo).replace(/[^a-z0-9]+/g, '-')}_${f(D.d0)}_${f(D.d1)}`;
+  const ase = l => (U(l.asesor_id) || {}).nombre || 'Sin asignar';
+  const hojas = {
+    Resumen: [['Reporte de gestión comercial', D.titulo], ['Periodo', f(D.d0) + ' al ' + f(D.d1)], ['Generado', fFechaHora(new Date().toISOString())], [], ['Indicador', 'Valor'],
+      ['Leads nuevos', t.nuevos], ['Contactos registrados', t.contactos], ['Movimientos de etapa', t.movs], ['Ganados', t.g.length], ['Valor ganado (USD)', Math.round(t.valorG)], ['Perdidos', t.p.length],
+      ['Ganados en el mes en curso', t.gMes], ['Meta del mes', t.meta || ''], ['Abiertos hoy', t.abiertos], ['Vencidos', t.vencidos], ['Sin próxima acción', t.sinAccion], ['Estancados', t.estancados]]
+      .concat(esAdmin() ? [['Ingreso propio ganado (USD) · privado', Math.round(t.ingG)]] : []),
+    'Por asesor': [['Asesor', 'Nuevos', 'Contactos', 'Movimientos', 'Ganados', 'Valor ganado (USD)', 'Perdidos', 'Ganados mes', 'Meta mes', 'Abiertos', 'Vencidos']].concat(D.porAsesor.map(x => [x.u.nombre, x.nuevos, x.contactos, x.movs, x.g.length, Math.round(x.valorG), x.p.length, x.gMes, x.meta || '', x.abiertos, x.vencidos])),
+    'Por pipeline': [['Pipeline', 'Nuevos', 'Ganados', 'Perdidos', 'Abiertos', 'Vencidos']].concat(D.porPipe.map(o => [o.p.nombre, o.x.nuevos, o.x.g.length, o.x.p.length, o.x.abiertos, o.x.vencidos])),
+    Ganados: [['Lead', 'Pipeline', 'College', 'Asesor', 'Valor', 'Moneda', 'Fecha']].concat(t.g.map(l => [l.nombre, (P(l.pipeline_id) || {}).nombre, (principalDe(l.id) || {}).nombre || '', ase(l), l.valor_cierre, l.moneda_cierre, f(new Date(l.cerrado_en))])),
+    Perdidos: [['Lead', 'Pipeline', 'Asesor', 'Motivo', 'Fecha']].concat(t.p.map(l => [l.nombre, (P(l.pipeline_id) || {}).nombre, ase(l), l.motivo_perdida, f(new Date(l.cerrado_en))])),
+    Agenda: [['Lead', 'Pipeline', 'Asesor', 'Próxima acción', 'Fecha', 'Estado']].concat(D.agenda.map(l => [l.nombre, (P(l.pipeline_id) || {}).nombre, ase(l), l.prox_accion, l.prox_vence ? fFechaHora(l.prox_vence) : '', vence(l) === 'vencido' ? 'Vencido' : 'Próximo']))
+  };
+  if (!jefe()) delete hojas['Por asesor'];
+  try { const X = await cargarXLSX(), wb = X.utils.book_new(); Object.entries(hojas).forEach(([n, a]) => X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(a), n)); X.writeFile(wb, nombre + '.xlsx'); toast('Reporte descargado.'); }
+  catch (e) {
+    const cel = v => { let s = String(v ?? ''); if (/^[=@]/.test(s) || /^[+\-](?!\d)/.test(s)) s = "'" + s; return /[",\n\r;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    bajar(nombre + '.csv', '\uFEFF' + Object.entries(hojas).map(([n, a]) => [[n.toUpperCase()]].concat(a).map(r => r.map(cel).join(',')).join('\r\n')).join('\r\n\r\n'), 'text/csv;charset=utf-8');
+    toast('No se pudo generar Excel; descargué CSV.', 'err');
+  }
 };
 
 /* ------------------------------- PANEL ------------------------------ */
@@ -781,12 +942,13 @@ function vPanel() {
   const equipo = esAdmin() ? S.usuarios.filter(u => u.activo || ls.some(l => l.asesor_id === u.user_id)) : S.usuarios.filter(u => u.user_id === S.yo.user_id || u.supervisor_id === S.yo.user_id);
   const filaU = u => { const m = ls.filter(l => l.asesor_id === u.user_id), a = m.filter(l => l.estado === 'abierto'), g = m.filter(l => l.estado === 'ganado').length, pe = m.filter(l => l.estado === 'perdido').length;
     const pc = m.filter(l => l.primer_contacto && new Date(l.created_at) > Date.now() - 30 * 864e5).map(l => (new Date(l.primer_contacto) - new Date(l.created_at)) / 6e4);
-    return `<tr><td class="b">${avatar(u.user_id)} ${esc(u.nombre)}</td><td>${a.length}</td><td>${S.act7 ? (S.act7[u.user_id] || 0) : '…'}</td><td class="${a.some(l => vence(l) === 'vencido') ? 'rojo b' : ''}">${a.filter(l => vence(l) === 'vencido').length}</td><td>${a.filter(l => vence(l) === 'sin').length}</td><td>${pc.length ? dur(pc.reduce((x, y) => x + y, 0) / pc.length) : '—'}</td><td>${gM.filter(l => l.asesor_id === u.user_id).length}</td><td>${pM.filter(l => l.asesor_id === u.user_id).length}</td><td>${g + pe ? Math.round(g / (g + pe) * 100) + '%' : '—'}</td></tr>`; };
+    return `<tr><td class="b">${avatar(u.user_id)} ${esc(u.nombre)}</td><td>${a.length}</td><td>${S.act7 ? (S.act7[u.user_id] || 0) : '…'}</td><td class="${a.some(l => vence(l) === 'vencido') ? 'rojo b' : ''}">${a.filter(l => vence(l) === 'vencido').length}</td><td>${a.filter(l => vence(l) === 'sin').length}</td><td>${pc.length ? dur(pc.reduce((x, y) => x + y, 0) / pc.length) : '—'}</td><td class="b">${gM.filter(l => l.asesor_id === u.user_id).length}${metaTotal(u.user_id) ? ` / ${metaTotal(u.user_id)}` : ''}</td><td>${pM.filter(l => l.asesor_id === u.user_id).length}</td><td>${g + pe ? Math.round(g / (g + pe) * 100) + '%' : '—'}</td></tr>`; };
   return `<div class="fila"><h1 style="margin-right:auto">${esAdmin() ? 'Panel del administrador' : 'Panel de mi equipo'}</h1><button class="btn" data-act="recargar">Actualizar</button></div>
     <div class="kpis">
       <div class="kpi"><span>Leads abiertos</span><b>${ab.length}</b><small>${pipesActivos().length} pipelines</small></div>
-      <div class="kpi"><span>Pipeline (precio al cliente)</span><b>${usd(ab.reduce((a, l) => a + aUSD(l.valor, l.moneda), 0))}</b><small>ponderado ${usd(ab.reduce((a, l) => a + aUSD(l.valor, l.moneda) * prob(l) / 100, 0))}</small></div>
-      ${esAdmin() ? `<div class="kpi" style="border-color:#F5D77A;background:#FFFBEB"><span>Ingreso propio ponderado</span><b>${usd(ab.reduce((a, l) => a + ingresoUSD(l) * prob(l) / 100, 0))}</b><small>solo lo ves tú</small></div>` : ''}
+      <div class="kpi"><span>Pipeline (precio al cliente)</span><b>${usd(ab.reduce((a, l) => a + aUSD(l.valor, l.moneda), 0))}</b><small>valor de los leads abiertos</small></div>
+      ${kpiMeta(gM.length, equipo.reduce((a, u) => a + metaTotal(u.user_id), 0), 'equipo')}
+      ${esAdmin() ? `<div class="kpi" style="border-color:#F5D77A;background:#FFFBEB"><span>Ingreso propio ganado este mes</span><b>${usd(gM.reduce((a, l) => a + ingresoUSD(l), 0))}</b><small>en juego: ${usd(ab.reduce((a, l) => a + ingresoUSD(l), 0))} · solo tú</small></div>` : ''}
       <div class="kpi"><span>Vencidas / sin acción</span><b class="rojo">${ab.filter(l => vence(l) === 'vencido').length} / ${ab.filter(l => vence(l) === 'sin').length}</b></div>
       <div class="kpi"><span>Ganados este mes</span><b class="verde">${gM.length}</b><small>${usd(gM.reduce((a, l) => a + aUSD(l.valor_cierre, l.moneda_cierre), 0))}</small></div>
       <div class="kpi"><span>Perdidos este mes</span><b>${pM.length}</b></div>
@@ -795,7 +957,7 @@ function vPanel() {
       ${cola.length ? `<div class="sx"><table class="tabla"><thead><tr><th>Cliente</th><th>Línea / producto en finanzas</th><th>Vendedor</th><th class="r">Valor de cierre</th><th>Cerrado</th><th></th></tr></thead><tbody>${cola.map(l => { const u = U(l.asesor_id) || {}, v = S.vendedores.find(x => x.id === u.vendedor_id); return `<tr><td class="b"><a href="#" data-act="abrir" data-id="${l.id}">${esc(l.nombre)}</a></td><td>${esc((P(l.pipeline_id) || {}).unidad_finanzas || (P(l.pipeline_id) || {}).nombre)}${(() => { const c = usaCol(l.pipeline_id) && principalDe(l.id); if (!c) return ''; const pr = S.productos.find(x => x.id === (S.privCol[c.id] || {}).producto_id); return ` · <b>${esc(pr ? pr.nombre : c.nombre)}</b>${pr ? '' : ' <span class="rojo">(sin producto enlazado)</span>'}`; })()}</td><td>${v ? esc(v.nombre) : `<span class="rojo">${esc(u.nombre || 'Sin asesor')} · sin enlazar</span>`}</td><td class="r b">${fm(l.valor_cierre, l.moneda_cierre)}</td><td>${fFecha(l.cerrado_en)}</td><td class="r"><button class="btn sm pri" data-act="fin" data-id="${l.id}" data-e="registrada">Ya la registré</button> <button class="btn sm" data-act="fin" data-id="${l.id}" data-e="no_aplica">No aplica</button></td></tr>`; }).join('')}</tbody></table></div>
       <span class="mut">Registra cada venta en tu panel financiero con estos datos y márcala aquí. Los asesores no ven esta lista.</span>` : '<span class="mut">Todo lo ganado ya está registrado en finanzas.</span>'}</section>` : ''}
     ${panelColleges()}
-    <section class="caja col"><h2>Desempeño por asesor</h2><div class="sx"><table class="tabla"><thead><tr><th>Asesor</th><th>Activos</th><th>Contactos 7 días</th><th>Vencidas</th><th>Sin acción</th><th>1.er contacto (30 d)</th><th>Ganados mes</th><th>Perdidos mes</th><th>Tasa de cierre</th></tr></thead><tbody>${equipo.map(filaU).join('')}</tbody></table></div></section>
+    <section class="caja col"><h2>Desempeño por asesor</h2><div class="sx"><table class="tabla"><thead><tr><th>Asesor</th><th>Activos</th><th>Contactos 7 días</th><th>Vencidas</th><th>Sin acción</th><th>1.er contacto (30 d)</th><th>Ganados mes / meta</th><th>Perdidos mes</th><th>Tasa de cierre</th></tr></thead><tbody>${equipo.map(filaU).join('')}</tbody></table></div></section>
     <div class="fila" style="align-items:stretch">
       <section class="caja col" style="flex:1 1 420px"><div class="fila"><h2 style="margin-right:auto">Leads abiertos por etapa</h2><div style="width:200px"><select data-chg="panelPipe" aria-label="Pipeline">${pipesActivos().map(x => `<option value="${x.id}" ${x.id === S.pipeId ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select></div></div>
         ${porE.map(x => `<div class="barra"><span>${esc(x[0])}</span><div class="pista"><i style="width:${x[1] / mxE * 100}%"></i></div><b class="r">${x[1]}</b></div>`).join('')}</section>
@@ -823,11 +985,12 @@ C.panelPipe = el => { S.pipeId = el.value; renderMain(); };
 A.fin = async el => { if (await guardarLead(el.dataset.id, { fin_estado: el.dataset.e })) { render(); toast('Actualizado.'); } };
 
 /* ------------------------------ IMPORTAR ---------------------------- */
-const CAMPOS = [['', 'No importar'], ['nombre', 'Nombre (completo o solo nombres)'], ['apellido', 'Apellidos (se unen al nombre)'], ['telefono', 'WhatsApp / celular'], ['email', 'Email'], ['colegio', 'Colegio / institución'], ['grado', 'Grado / año de egreso'], ['ciudad', 'Ciudad'], ['pais', 'País'], ['fecha_nacimiento', 'Fecha de nacimiento'], ['nivel_ingles', 'Nivel de inglés'], ['programa_interes', 'Programa de interés'], ['apoderado_nombre', 'Apoderado · nombre'], ['apoderado_parentesco', 'Apoderado · parentesco'], ['apoderado_telefono', 'Apoderado · WhatsApp'], ['apoderado_email', 'Apoderado · email'], ['colleges', 'College(s) de interés'], ['valor', 'Valor (precio al cliente)'], ['fuente', 'Fuente (por fila)'], ['etiquetas', 'Etiquetas'], ['notas', 'Notas / comentarios']];
+const CAMPOS = [['', 'No importar'], ['nombre', 'Nombre (completo o solo nombres)'], ['apellido', 'Apellidos (se unen al nombre)'], ['telefono', 'WhatsApp / celular'], ['email', 'Email'], ['colegio', 'Colegio / institución'], ['grado', 'Grado / año de egreso'], ['ciudad', 'Ciudad'], ['pais', 'País'], ['fecha_nacimiento', 'Fecha de nacimiento'], ['nivel_ingles', 'Nivel de inglés'], ['programa_interes', 'Programa de interés'], ['apoderado_nombre', 'Apoderado · nombre'], ['apoderado_parentesco', 'Apoderado · parentesco'], ['apoderado_telefono', 'Apoderado · WhatsApp'], ['apoderado_email', 'Apoderado · email'], ['colleges', 'College(s) de interés'], ['asesor', 'Asesor responsable (nombre o correo)'], ['valor', 'Valor (precio al cliente)'], ['fuente', 'Fuente (por fila)'], ['etiquetas', 'Etiquetas'], ['notas', 'Notas / comentarios']];
 const COLS_IMP = ['nombre', 'telefono', 'email', 'colegio', 'grado', 'ciudad', 'fecha_nacimiento', 'nivel_ingles', 'programa_interes', 'apoderado_nombre', 'apoderado_parentesco', 'apoderado_telefono', 'apoderado_email', 'notas'];
 function adivinar(h) {
   const s = String(h).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   const tel = /(tel|cel|whats|phone|movil|numero)/, mail = /(mail|correo)/;
+  if (/(asesor|vendedor|responsable|ejecutiv|propietario|owner|assigned|encargad)/.test(s)) return 'asesor';
   if (/(padre|madre|apoderad|parent|tutor|papa|mama)/.test(s)) return tel.test(s) ? 'apoderado_telefono' : mail.test(s) ? 'apoderado_email' : /parentesco|relacion/.test(s) ? 'apoderado_parentesco' : 'apoderado_nombre';
   if (/parentesco/.test(s)) return 'apoderado_parentesco';
   if (/(apellido|last.?name|surname)/.test(s)) return 'apellido';
@@ -889,7 +1052,8 @@ function vImportar() {
           <label class="f">Etapa inicial${sel('etapa', etapasDe(im.pipe).map(x => [x.id, x.nombre]))}</label>
           <label class="f">Fuente<input type="text" list="dlF2" value="${esc(im.fuente)}" data-chg="imp" data-k="fuente"><datalist id="dlF2">${FUENTES.map(x => `<option value="${x}">`).join('')}</datalist></label>
           <label class="f">Nombre del lote<input type="text" value="${esc(im.lote)}" data-chg="imp" data-k="lote"></label></div>
-        <label class="f">Reparto${sel('reparto', [['equitativo', `Equitativo entre asesores activos (${asesores.length})`], ['uno', 'Todo a una persona'], ['sin', 'Sin asignar (solo los ves tú)']])}</label>
+        ${im.mapa.includes('asesor') ? `<div class="aviso">${an.conAsesor} lead(s) traen su asesor en el archivo y se le asignan a esa persona. El resto se reparte según esta opción.</div>${an.aseDesc.length ? `<div class="aviso a">Asesores que no reconozco (esos leads se reparten): <b>${an.aseDesc.map(esc).join(', ')}</b>. Usa el nombre o el correo con el que tienen acceso al CRM.</div>` : ''}` : ''}
+        <label class="f">${im.mapa.includes('asesor') ? 'Reparto del resto' : 'Reparto'}${sel('reparto', [['equitativo', `Equitativo entre asesores activos (${asesores.length})`], ['uno', 'Todo a una persona'], ['sin', 'Sin asignar (solo los ves tú)']])}</label>
         ${im.reparto === 'uno' ? `<label class="f">Persona${sel('asesor', S.usuarios.filter(u => u.activo).map(u => [u.user_id, u.nombre]))}</label>` : ''}
         ${im.reparto === 'equitativo' && !asesores.length ? '<div class="aviso a">No hay asesores activos: quedarán sin asignar.</div>' : ''}
         <label class="chk"><input type="checkbox" data-chg="impOk" ${im.ok ? 'checked' : ''}> Confirmo que estas personas autorizaron ser contactadas (Ley 29733).</label></section>
@@ -900,13 +1064,14 @@ function vImportar() {
 }
 function analizar() {
   const im = S.imp, exT = new Set(), exM = new Set(), vT = new Set(), vM = new Set(), r = { nuevos: [], dupCRM: [], dupArch: 0, malos: 0, aCrear: [], colNuevos: [], conCol: 0 };
-  const nuevosCol = new Map();
+  const nuevosCol = new Map(), aseDesc = new Set();
   S.leads.forEach(l => { [l.telefono, l.apoderado_telefono].forEach(x => { const k = tel9(x); if (k) exT.add(k); }); [l.email, l.apoderado_email].forEach(x => { if (x) exM.add(String(x).toLowerCase()); }); });
   im.filas.forEach(f => {
     const o = { etiquetas: [] }; let ape = '';
     im.mapa.forEach((c, i) => { const v = String(f[i] ?? '').trim(); if (!c || !v) return;
       if (c === 'apellido') ape = v; else if (c === 'telefono' || c === 'apoderado_telefono') o[c] = normTel(v); else if (c === 'email' || c === 'apoderado_email') o[c] = v.toLowerCase();
       else if (c === 'valor') { const n = Number(v.replace(/[^\d.,-]/g, '').replace(/,(?=\d{3}\b)/g, '').replace(',', '.')); if (!isNaN(n)) o.valor = n; }
+      else if (c === 'asesor') { const u = buscarUsuario(v); if (u) o._asesor = u.user_id; else aseDesc.add(v); }
       else if (c === 'colleges') { o._cols = v.split(/\s*(?:[,;\/|+]| y | and )\s*/i).map(x => x.trim()).filter(Boolean).map(x => { const m = buscarCollege(x); if (m) return { id: m.id }; const k = sinTildes(x); if (!nuevosCol.has(k)) nuevosCol.set(k, x); return { nuevo: k }; }); }
       else if (c === 'fecha_nacimiento') o[c] = parseFecha(v); else if (c === 'etiquetas') o.etiquetas = v.split(/[,;]/).map(s => s.trim()).filter(Boolean); else o[c] = v; });
     if (ape) o.nombre = ((o.nombre || '') + ' ' + ape).trim();
@@ -917,6 +1082,7 @@ function analizar() {
     (ts.some(k => exT.has(k)) || ms.some(k => exM.has(k)) ? r.dupCRM : r.nuevos).push(o);
   });
   r.aCrear = im.dup === 'crear' ? r.nuevos.concat(r.dupCRM) : r.nuevos;
+  r.aseDesc = Array.from(aseDesc); r.conAsesor = r.aCrear.filter(o => o._asesor).length;
   r.colNuevos = Array.from(nuevosCol.values()); r.conCol = r.aCrear.filter(o => o._cols && o._cols.length).length;
   return r;
 }
@@ -938,7 +1104,7 @@ C.mapa = el => { const i = +el.dataset.i, v = el.value; if (v) S.imp.mapa = S.im
 C.imp = el => { S.imp[el.dataset.k] = el.value; if (el.dataset.k === 'pipe') S.imp.etapa = (etapasDe(el.value)[0] || {}).id || ''; renderMain(); };
 C.impOk = el => { S.imp.ok = el.checked; renderMain(); };
 C.impCol = el => { S.imp.crearCol = el.checked; renderMain(); };
-A.plantilla = () => bajar('plantilla_leads_GO.csv', '﻿Nombres,Apellidos,Celular,Correo,Colegio,Grado,Ciudad,Nombre del apoderado,Celular del apoderado,Programa de interes,College de interes,Comentarios\r\nLucia,Herrera Ruiz,987654321,lucia@correo.com,Colegio Ejemplo,5to secundaria,Lima,Pilar Ruiz,912345678,College Counseling,"Edmonds; San Mateo",Vino por la feria\r\n', 'text/csv;charset=utf-8');
+A.plantilla = () => bajar('plantilla_leads_GO.csv', '﻿Nombres,Apellidos,Celular,Correo,Colegio,Grado,Ciudad,Nombre del apoderado,Celular del apoderado,Programa de interes,College de interes,Asesor,Comentarios\r\nLucia,Herrera Ruiz,987654321,lucia@correo.com,Colegio Ejemplo,5to secundaria,Lima,Pilar Ruiz,912345678,College Counseling,"Edmonds; San Mateo",Medaly,Vino por la feria\r\n', 'text/csv;charset=utf-8');
 A.importar = async el => {
   const im = S.imp, an = analizar(); if (!an.aCrear.length) return;
   el.disabled = true; el.textContent = 'Importando…';
@@ -951,9 +1117,11 @@ A.importar = async el => {
       const nv = await q(sb.from('crm_colleges').insert(an.colNuevos.map((t, i) => ({ nombre: t, sigla: t.replace(/[^A-Za-z0-9]/g, '').slice(0, 4).toUpperCase() || 'COL', color: paleta[(S.colleges.length + i) % paleta.length], alias: [sinTildes(t)], orden: base + i + 1 }))).select());
       S.colleges = S.colleges.concat(nv); nv.forEach(c => { idNuevo[sinTildes(c.nombre)] = c.id; });
     }
+    let rr = 0;                          // reparto equitativo solo entre los que no traen asesor
     const filas = an.aCrear.map((o, i) => { const r = {}; COLS_IMP.forEach(k => { r[k] = o[k] ?? null; });     // todas las filas con las mismas columnas
-      return Object.assign(r, { id: nuevoId(), pais: o.pais || 'Perú', etiquetas: o.etiquetas || [], pipeline_id: im.pipe, etapa_id: im.etapa, lote_id: lote.id, fuente: o.fuente || im.fuente || null, moneda: p.moneda, valor: o.valor ?? p.valor_default ?? null, consentimiento: true, prox_accion: 'Primer contacto', prox_vence: pv,
-        asesor_id: im.reparto === 'uno' ? im.asesor : im.reparto === 'equitativo' && ases.length ? ases[i % ases.length].user_id : null }); });
+      return Object.assign(r, { id: nuevoId(), pais: o.pais || 'Perú', etiquetas: o.etiquetas || [], pipeline_id: im.pipe, etapa_id: im.etapa, lote_id: lote.id, fuente: o.fuente || im.fuente || null, moneda: p.moneda, valor: o.valor ?? p.valor_default ?? (tarifaDef(im.pipe) || {}).valor ?? null, consentimiento: true, prox_accion: 'Primer contacto', prox_vence: pv,
+        tarifa: S.v101 ? (o.valor != null ? (precios(im.pipe).find(x => Number(x.valor) === Number(o.valor)) || {}).nombre || null : (tarifaDef(im.pipe) || {}).nombre || null) : undefined,
+        asesor_id: o._asesor || (im.reparto === 'uno' ? im.asesor : im.reparto === 'equitativo' && ases.length ? ases[(rr++) % ases.length].user_id : null) }); });
     let hechos = 0;
     for (let i = 0; i < filas.length; i += 200) { const d = await q(sb.from('crm_leads').insert(filas.slice(i, i + 200)).select()); S.leads = S.leads.concat(d); hechos += d.length; el.textContent = `Importando… ${hechos}/${filas.length}`; }
     if (!S.sinCol) {                     // colleges de cada lead; el primero de la celda es el principal
@@ -994,6 +1162,7 @@ function vConfig() {
         <label class="f" style="width:160px">Rol<select name="rol">${rolO('asesor')}</select></label>
         <button class="btn pri">Dar acceso</button></form>
       <span class="mut">El supervisor ve sus leads y los de quienes le reportan. Nadie fuera del administrador ve margen ni finanzas.</span></section>
+    ${configMetas()}
     ${configColleges()}
     <section class="caja col"><div class="fila"><h2 style="margin-right:auto">Pipelines y etapas</h2>
       <form class="fila" data-sub="nuevoPipe"><input type="text" name="nombre" placeholder="Nombre del nuevo pipeline" required style="width:230px"><select name="moneda" style="width:90px"><option>USD</option><option>PEN</option></select><button class="btn">+ Pipeline</button></form></div>
@@ -1002,25 +1171,44 @@ function vConfig() {
           <label class="f" style="flex:1 1 190px">Pipeline<input type="text" name="nombre" value="${esc(p.nombre)}" required></label>
           <label class="f" style="width:90px">Moneda<select name="moneda"><option ${p.moneda === 'USD' ? 'selected' : ''}>USD</option><option ${p.moneda === 'PEN' ? 'selected' : ''}>PEN</option></select></label>
           <label class="f" style="width:140px">Precio sugerido<input type="number" step="0.01" name="valor_default" value="${p.valor_default ?? ''}"></label>
+          ${S.v101 ? `<label class="f" style="flex:1 1 260px">Tarifas (nombre = monto; separa con ;)<input type="text" name="precios" value="${esc(precios(p.id).map(x => x.nombre + ' = ' + x.valor).join('; '))}" placeholder="Público = 3690; Colegio de convenio = 3490"></label>` : ''}
           <label class="f" style="width:150px">Línea en finanzas<input type="text" name="unidad_finanzas" value="${esc(p.unidad_finanzas || '')}"></label>
           <label class="f" style="width:140px;color:var(--amb)">Costo proveedor · privado<input type="number" step="0.01" name="costo_default" value="${pp.costo_default ?? ''}"></label>
           <label class="f" style="width:140px;color:var(--amb)">Ingreso fijo · privado<input type="number" step="0.01" name="ingreso_fijo" value="${pp.ingreso_fijo ?? ''}"></label>
           <label class="chk" style="height:38px;align-items:center"><input type="checkbox" name="activo" ${p.activo ? 'checked' : ''} style="margin:0"> Activo</label>
           ${S.sinCol ? '' : `<label class="chk" style="height:38px;align-items:center"><input type="checkbox" name="usa_colleges" ${p.usa_colleges ? 'checked' : ''} style="margin:0"> Usa colleges</label>`}
           <button class="btn sm pri" style="height:38px">Guardar</button></form>
-        <div class="sx"><table class="tabla"><thead><tr><th style="width:60px">Orden</th><th>Etapa</th><th style="width:130px">Probabilidad %</th><th style="width:80px">Activa</th><th class="r" style="width:90px">Leads</th></tr></thead><tbody>
+        <div class="sx"><table class="tabla"><thead><tr><th style="width:60px">Orden</th><th>Etapa</th><th style="width:80px">Activa</th><th class="r" style="width:90px">Leads</th></tr></thead><tbody>
           ${ets.map((e, i) => `<tr><td><button class="btn sm" data-act="etSube" data-id="${e.id}" ${i ? '' : 'disabled'} aria-label="Subir">↑</button></td>
             <td><input type="text" value="${esc(e.nombre)}" data-chg="et" data-id="${e.id}" data-k="nombre" aria-label="Nombre de etapa"></td>
-            <td><input type="number" min="0" max="100" value="${e.probabilidad}" data-chg="et" data-id="${e.id}" data-k="probabilidad" aria-label="Probabilidad"></td>
             <td><input type="checkbox" ${e.activo ? 'checked' : ''} data-chg="et" data-id="${e.id}" data-k="activo" aria-label="Activa"></td>
             <td class="r">${S.leads.filter(l => l.etapa_id === e.id && l.estado === 'abierto').length}</td></tr>`).join('')}
         </tbody></table></div>
-        <form class="fila" data-sub="nuevaEtapa" data-id="${p.id}"><input type="text" name="nombre" placeholder="Nueva etapa" required style="width:220px"><input type="number" name="prob" min="0" max="100" placeholder="Prob. %" style="width:100px"><button class="btn sm">+ Etapa</button></form>
+        <form class="fila" data-sub="nuevaEtapa" data-id="${p.id}"><input type="text" name="nombre" placeholder="Nueva etapa" required style="width:220px"><button class="btn sm">+ Etapa</button></form>
       </div>`; }).join('')}
       <span class="mut">Los campos «privado» solo los ves tú. El ingreso propio de cada lead se calcula como precio − costo proveedor, salvo que pongas un ingreso fijo aquí o un monto específico en la ficha del lead. «Ganado» y «Perdido» no son etapas: son el cierre.</span></section>
     <section class="caja col"><h2>Ajustes</h2><form class="fila" data-sub="cfg" style="align-items:flex-end"><label class="f" style="width:260px">Días para considerar un lead estancado<input type="number" name="dias" min="1" max="365" value="${S.config.dias_estancado}"></label><button class="btn">Guardar</button></form>
       <span class="mut">${VERSION}</span></section>`;
 }
+function configMetas() {
+  if (!S.v101) return `<section class="caja col"><h2>Metas mensuales</h2><div class="aviso a">Para activar metas y tarifas corre <b>crm-v1-01.sql</b> en Supabase y recarga.</div></section>`;
+  const us = S.usuarios.filter(u => u.activo), ps = pipesActivos();
+  const inp = (u, pid) => `<input type="number" min="0" value="${metaDe(u, pid) || ''}" placeholder="—" data-chg="meta" data-u="${u}" data-p="${pid || ''}" aria-label="Meta" style="width:76px">`;
+  return `<section class="caja col"><h2>Metas mensuales (cantidad de ganados)</h2>
+    <div class="sx"><table class="tabla"><thead><tr><th>Usuario</th><th>Total del mes</th>${ps.map(p => `<th>${esc(p.nombre)}</th>`).join('')}</tr></thead><tbody>
+    ${us.map(u => `<tr><td class="b">${esc(u.nombre)}</td><td>${inp(u.user_id, null)}</td>${ps.map(p => `<td>${inp(u.user_id, p.id)}</td>`).join('')}</tr>`).join('')}
+    </tbody></table></div>
+    <span class="mut">Cada asesor ve solo su meta y su avance. "Total del mes" es opcional: si lo dejas vacío, el total es la suma de sus metas por pipeline.</span></section>`;
+}
+C.meta = async el => {
+  const uid = el.dataset.u, pid = el.dataset.p || null, val = Math.max(0, parseInt(el.value, 10) || 0), act = S.metas.find(m => m.user_id === uid && (m.pipeline_id || null) === pid);
+  try {
+    if (act && !val) { await q(sb.from('crm_metas').delete().eq('id', act.id)); S.metas = S.metas.filter(m => m !== act); }
+    else if (act) { Object.assign(act, await q(sb.from('crm_metas').update({ meta: val, updated_at: new Date().toISOString() }).eq('id', act.id).select().single())); }
+    else if (val) { S.metas.push(await q(sb.from('crm_metas').insert({ user_id: uid, pipeline_id: pid, meta: val }).select().single())); }
+    toast('Meta guardada.');
+  } catch (e) { toast(msgErr(e), 'err'); renderMain(); }
+};
 function configColleges() {
   if (S.sinCol) return `<section class="caja col"><h2>Colleges</h2><div class="aviso a">Para activar College Counseling corre <b>crm-etapa2-colleges.sql</b> en Supabase y recarga.</div></section>`;
   const mon = m => `<option ${m !== 'PEN' ? 'selected' : ''}>USD</option><option ${m === 'PEN' ? 'selected' : ''}>PEN</option>`;
@@ -1061,10 +1249,13 @@ C.usr = async el => {
   Object.assign(U(el.dataset.id), data); if (data.user_id === S.yo.user_id) S.yo = data; render(); toast('Usuario actualizado.');
 };
 F.alta = async f => { try { const u = await q(sb.rpc('crm_alta_usuario', { p_email: f.email.value.trim(), p_nombre: f.nombre.value.trim(), p_rol: f.rol.value, p_supervisor: null })); S.usuarios = S.usuarios.filter(x => x.user_id !== u.user_id).concat([u]).sort((a, b) => a.nombre.localeCompare(b.nombre)); renderMain(); toast(`${u.nombre} ya puede entrar al CRM.`); } catch (e) { toast(msgErr(e), 'err'); } };
+function leerTarifas(t) {
+  return String(t || '').split(';').map(x => x.trim()).filter(Boolean).map(x => { const m = x.match(/^(.*?)\s*[=:]\s*([\d.,]+)\s*$/); return m ? { nombre: m[1].trim(), valor: Number(m[2].replace(/,/g, '')) } : null; }).filter(x => x && x.nombre && !isNaN(x.valor));
+}
 F.pipe = async f => {
   const id = f.dataset.id, n = x => f[x].value === '' ? null : Number(f[x].value);
   try {
-    const p = await q(sb.from('crm_pipelines').update({ nombre: f.nombre.value.trim(), moneda: f.moneda.value, valor_default: n('valor_default'), unidad_finanzas: f.unidad_finanzas.value.trim() || null, activo: f.activo.checked, ...(f.usa_colleges ? { usa_colleges: f.usa_colleges.checked } : {}) }).eq('id', id).select().single());
+    const p = await q(sb.from('crm_pipelines').update({ nombre: f.nombre.value.trim(), moneda: f.moneda.value, valor_default: n('valor_default'), unidad_finanzas: f.unidad_finanzas.value.trim() || null, activo: f.activo.checked, ...(f.usa_colleges ? { usa_colleges: f.usa_colleges.checked } : {}), ...(f.precios ? { precios: leerTarifas(f.precios.value) } : {}) }).eq('id', id).select().single());
     Object.assign(P(id), p);
     S.privPipe[id] = await q(sb.from('crm_pipeline_privado').upsert({ pipeline_id: id, costo_default: n('costo_default'), ingreso_fijo: n('ingreso_fijo') }, { onConflict: 'pipeline_id' }).select().single());
     if (!P(S.pipeId) || !P(S.pipeId).activo) S.pipeId = (pipesActivos()[0] || {}).id || null;
@@ -1072,7 +1263,7 @@ F.pipe = async f => {
   } catch (e) { toast(msgErr(e), 'err'); }
 };
 F.nuevoPipe = async f => { try { const orden = Math.max(0, ...S.pipelines.map(p => p.orden)) + 1; const p = await q(sb.from('crm_pipelines').insert({ nombre: f.nombre.value.trim(), moneda: f.moneda.value, orden }).select().single()); const es = await q(sb.from('crm_etapas').insert([{ pipeline_id: p.id, nombre: 'Nuevo', orden: 1, probabilidad: 10 }, { pipeline_id: p.id, nombre: 'Contactado', orden: 2, probabilidad: 25 }]).select()); S.pipelines.push(p); S.etapas = S.etapas.concat(es); if (!S.pipeId) S.pipeId = p.id; renderMain(); toast('Pipeline creado con 2 etapas iniciales.'); } catch (e) { toast(msgErr(e), 'err'); } };
-F.nuevaEtapa = async f => { const pid = f.dataset.id; try { const orden = Math.max(0, ...etapasDe(pid, true).map(e => e.orden)) + 1; const e = await q(sb.from('crm_etapas').insert({ pipeline_id: pid, nombre: f.nombre.value.trim(), orden, probabilidad: Number(f.prob.value || 0) }).select().single()); S.etapas.push(e); renderMain(); toast('Etapa agregada.'); } catch (x) { toast(msgErr(x), 'err'); } };
+F.nuevaEtapa = async f => { const pid = f.dataset.id; try { const orden = Math.max(0, ...etapasDe(pid, true).map(e => e.orden)) + 1; const e = await q(sb.from('crm_etapas').insert({ pipeline_id: pid, nombre: f.nombre.value.trim(), orden, probabilidad: 0 }).select().single()); S.etapas.push(e); renderMain(); toast('Etapa agregada.'); } catch (x) { toast(msgErr(x), 'err'); } };
 C.et = async el => {
   const e = E(el.dataset.id), k = el.dataset.k; let v = k === 'activo' ? el.checked : k === 'probabilidad' ? Math.max(0, Math.min(100, Number(el.value) || 0)) : el.value.trim();
   if (k === 'nombre' && !v) return renderMain();
